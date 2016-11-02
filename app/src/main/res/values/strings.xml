@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">AcmeCafeTerminal</string>
+    <string name="qr_code_scanner">QR Code Scanner</string>
+</resources>
