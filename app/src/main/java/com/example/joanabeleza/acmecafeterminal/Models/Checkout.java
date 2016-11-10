@@ -8,12 +8,14 @@ import java.util.List;
 public class Checkout implements Serializable {
     private String uuid;
     private List<Product> items = new ArrayList<>();
+    private List<Voucher> vouchers = new ArrayList<>();
     private BigDecimal total;
 
 
-    public Checkout(String uuid, List<Product> items, BigDecimal total) {
+    public Checkout(String uuid, List<Product> items, List<Voucher> vouchers, BigDecimal total) {
         this.items = items;
         this.uuid = uuid;
+        this.vouchers = vouchers;
         this.total = total;
     }
 
@@ -32,6 +34,14 @@ public class Checkout implements Serializable {
 
     public void setItems(List<Product> items) {
         this.items = items;
+    }
+
+    public List<Voucher> getVouchers() {
+        return vouchers;
+    }
+
+    public void setVouchers(List<Voucher> vouchers) {
+        this.vouchers = vouchers;
     }
 
     public BigDecimal getTotal() {
