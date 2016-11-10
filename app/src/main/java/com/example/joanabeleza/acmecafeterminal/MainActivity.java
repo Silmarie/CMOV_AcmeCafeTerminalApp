@@ -116,19 +116,16 @@ public class MainActivity extends AppCompatActivity implements ZXingScannerView.
                             // response
                             try {
                                 JSONObject obj = new JSONObject(response);
-                                String finalPrice = obj.getString("FinalPrice");
+                                String title = obj.getString("Title");
+                                String message = obj.getString("Message");
 
-                                AlertDialog.Builder builder = new AlertDialog.Builder(getApplicationContext());
-                                builder.setTitle("Order completed");
-                                builder.setMessage("Final Prioe: " + finalPrice);
+                                AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
+                                builder.setTitle(title);
+                                builder.setMessage(message);
                                 AlertDialog alert1 = builder.create();
                                 alert1.show();
-
-                                //TODO tratar o resultado para os erros (faltam as validações na parte do servidor)
-
-                                Log.e("Resposta do Server", response);
                             } catch (Throwable t) {
-                                Log.e("App", "Could not parse malformed JSON: \"" + response + "\"");
+                                Log.e("App", t.getMessage());
                             }
                             //Log.d("Response", response);
                             showProgress(false);
