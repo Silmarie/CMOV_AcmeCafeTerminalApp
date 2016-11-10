@@ -10,6 +10,7 @@ public class Checkout implements Serializable {
     private List<Product> items = new ArrayList<>();
     private List<Voucher> vouchers = new ArrayList<>();
     private BigDecimal total;
+    private String date;
 
 
     public Checkout(String uuid, List<Product> items, List<Voucher> vouchers, BigDecimal total) {
@@ -26,7 +27,6 @@ public class Checkout implements Serializable {
     public void setUuid(String uuid) {
         this.uuid = uuid;
     }
-
 
     public List<Product> getItems() {
         return items;
@@ -50,5 +50,13 @@ public class Checkout implements Serializable {
 
     public void setTotal(BigDecimal total) {
         this.total = total;
+    }
+
+    public String getDate() {
+        return date;
+    }
+
+    public void setDate(String date) {
+        this.date = date;
     }
 }

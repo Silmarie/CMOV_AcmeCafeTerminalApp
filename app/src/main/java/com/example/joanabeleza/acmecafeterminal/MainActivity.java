@@ -33,6 +33,7 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
@@ -40,6 +41,8 @@ import java.util.List;
 import java.util.Map;
 
 import me.dm7.barcodescanner.zxing.ZXingScannerView;
+
+import static android.R.attr.defaultValue;
 
 public class MainActivity extends AppCompatActivity implements ZXingScannerView.ResultHandler {
     private ZXingScannerView mScannerView;
@@ -59,6 +62,7 @@ public class MainActivity extends AppCompatActivity implements ZXingScannerView.
         mProgressView = findViewById(R.id.login_progress);
 
         updateBlackListFromServer();
+        postStoredCheckoutList();
     }
 
     public void qrCodeScanner(View view){
@@ -102,7 +106,7 @@ public class MainActivity extends AppCompatActivity implements ZXingScannerView.
         Checkout checkout = gson.fromJson(rawResult.getText(), Checkout.class);
 
         // Create order
-        postOrder(checkout.getUuid(), checkout);
+        postOrder(checkout);
 
         //If you would like to resume scanning, call this method below:
         mScannerView.resumeCameraPreview(this);
@@ -136,13 +140,14 @@ public class MainActivity extends AppCompatActivity implements ZXingScannerView.
                                 e.printStackTrace();
                             }
                         }
-                        Toast.makeText(mMain.getContext(), "Costumer blacklist updated from the server.", Toast.LENGTH_SHORT).show();
 
                         // save the blacklist list to preferences
                         ArrayList<Object> listOfStrings = new ArrayList<>(costumerBlackList.size());
                         listOfStrings.addAll(costumerBlackList);
                         TinyDB tinydb = new TinyDB(getApplicationContext());
                         tinydb.putListObject("CostumerBlackList", listOfStrings);
+
+                        Toast.makeText(mMain.getContext(), "Costumer blacklist updated from the server.", Toast.LENGTH_SHORT).show();
                     }
 
                 },
@@ -164,14 +169,16 @@ public class MainActivity extends AppCompatActivity implements ZXingScannerView.
     /*
         Creates the order
      */
-    protected void postOrder(final String uuid, final Checkout order){
+    protected void postOrder(final Checkout order){
         showProgress(true);
+
+        updateBlackListFromServer();
 
         //Verifica se está na blacklist local
         TinyDB tinydb = new TinyDB(getApplicationContext());
         ArrayList<Object> arl = tinydb.getListObject("CostumerBlackList", String.class);
         for (Object e : arl) {
-            if(((String) e).matches(uuid)){
+            if(((String) e).matches(order.getUuid())){
                 Toast.makeText(mMain.getContext(), "This costumer is blacklisted.", Toast.LENGTH_SHORT).show();
                 showProgress(false);
                 return;
@@ -193,6 +200,12 @@ public class MainActivity extends AppCompatActivity implements ZXingScannerView.
                                 String message = obj.getString("Message");
                                 Boolean putBlacklist = obj.getBoolean("PutBlacklist");
 
+                                TinyDB tinydb = new TinyDB(getApplicationContext());
+                                if(obj.has("OrderId")){
+                                    int orderId = obj.getInt("OrderId");
+                                    tinydb.putInt("LastOrderId", orderId);
+                                }
+
                                 AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
                                 builder.setTitle(title);
                                 builder.setMessage(message);
@@ -201,18 +214,14 @@ public class MainActivity extends AppCompatActivity implements ZXingScannerView.
 
                                 if(putBlacklist){
                                     //Adiciona na blacklist
-                                    TinyDB tinydb = new TinyDB(getApplicationContext());
+                                    //TinyDB tinydb = new TinyDB(getApplicationContext());
                                     List<String> costumerBlackList = new ArrayList<>();
-                                    ArrayList<Object> arl = tinydb.getListObject("CostumerBlackList", String.class);
-                                    for (Object e : arl) {
-                                        costumerBlackList.add((String) e);
-                                    }
-
-                                    costumerBlackList.add(uuid);
-
+                                    ArrayList<Object> arl = tinydb.getListObject("CostumerBlackList", String.class); //Load
+                                    for (Object e : arl) { costumerBlackList.add((String) e); }
+                                    costumerBlackList.add(order.getUuid()); //Adiciona o novo elemento
                                     ArrayList<Object> listOfStrings = new ArrayList<>(costumerBlackList.size());
                                     listOfStrings.addAll(costumerBlackList);
-                                    tinydb.putListObject("CostumerBlackList", listOfStrings);
+                                    tinydb.putListObject("CostumerBlackList", listOfStrings); //Save
                                 }
 
                             } catch (Throwable t) {
@@ -220,16 +229,43 @@ public class MainActivity extends AppCompatActivity implements ZXingScannerView.
                             }
                             //Log.d("Response", response);
                             showProgress(false);
+                            postStoredCheckoutList(); //Aproveita para sincronizar as encomendas que estão guardadas
                         }
                     },
                     new Response.ErrorListener()
                     {
                         @Override
                         public void onErrorResponse(VolleyError error) {
-                            // error
                             Log.e("Volley", error.toString());
-                            Toast.makeText(mMain.getContext(), "Couldn't connect to the server.", Toast.LENGTH_SHORT).show();
-                            //TODO fazer a validação offline e guardar a order para posteriormente mandar para o sv
+                            Toast.makeText(mMain.getContext(), "Couldn't send the order to the server.", Toast.LENGTH_SHORT).show();
+                            //TODO fazer a validação offline e mandar order posteriormente para o sv
+
+                            TinyDB tinydb = new TinyDB(getApplicationContext());
+
+                            //Apresenta os dados da encomenda ao utilizador
+                            int orderId = 0;
+                            order.setDate((new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")).format(new Date()));
+                            if(defaultValue != tinydb.getInt("LastOrderId")){ orderId = tinydb.getInt("LastOrderId") + 1; }
+                            tinydb.putInt("LastOrderId", orderId);
+                            String vouchers = "";
+                            for (Voucher v: order.getVouchers()) { vouchers += v.getTitle() + ", "; }
+                            vouchers = vouchers.substring(0, vouchers.length() - 2);
+
+                            AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
+                            builder.setTitle("Success");
+                            builder.setMessage("Order Id: " + orderId + "\nUsed Vouchers: " + vouchers + "\nFinal Price: " + order.getTotal());
+                            AlertDialog alert1 = builder.create();
+                            alert1.show();
+
+                            // Guarda order na lista de orders ainda não sincronizadas com o servidor
+                            List<Checkout> offlineCheckoutList = new ArrayList<>();
+                            ArrayList<Object> arl = tinydb.getListObject("OfflineCheckoutList", Checkout.class); //Load
+                            for (Object e : arl) { offlineCheckoutList.add((Checkout) e); }
+                            offlineCheckoutList.add(order); //Adiciona o novo elemento
+                            ArrayList<Object> listOfStrings = new ArrayList<>(offlineCheckoutList.size());
+                            listOfStrings.addAll(offlineCheckoutList);
+                            tinydb.putListObject("OfflineCheckoutList", listOfStrings); //Save
+
                             showProgress(false);
                         }
                     }
@@ -240,15 +276,15 @@ public class MainActivity extends AppCompatActivity implements ZXingScannerView.
                     Gson gson = new Gson();
                     Map<String, String>  params = new HashMap<>();
 
-                    params.put("CostumerUuid", uuid);
-                    params.put("Date", (new Date()).toString());
+                    params.put("CostumerUuid", order.getUuid());
+                    params.put("Date", (new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")).format(new Date()));
 
                     List<OrderDetails> od = new ArrayList<>();
                     for (Product p : order.getItems()) { od.add(new OrderDetails(p.getId(),p.getQuantity(),p.getPrice())); }
                     params.put("Products", gson.toJson(od).replace("\"", ""));
 
                     List<VoucherDetails> vd = new ArrayList<>();
-                    for (Voucher p : order.getVouchers()) { vd.add(new VoucherDetails(p.getId(),p.getType(), "")); } //TODO corrigir signature
+                    for (Voucher p : order.getVouchers()) { vd.add(new VoucherDetails(p.getId(),p.getType(),"")); } //TODO corrigir signature
                     params.put("Vouchers", gson.toJson(vd).replace("\"", ""));
 
                     //Log.e("PostParams", params.toString());
@@ -261,6 +297,101 @@ public class MainActivity extends AppCompatActivity implements ZXingScannerView.
             e.printStackTrace();
         }
     }
+
+    protected void postStoredCheckoutList(){
+        TinyDB tinydb = new TinyDB(getApplicationContext());
+        List<Checkout> offlineCheckoutList = new ArrayList<>();
+        ArrayList<Object> arl = tinydb.getListObject("OfflineCheckoutList", Checkout.class); //Load
+        tinydb.remove("OfflineCheckoutList"); //Limpa
+        for (Object e : arl) { offlineCheckoutList.add((Checkout) e); }
+
+        for (Checkout o :offlineCheckoutList) {
+            final Checkout order = o;
+            // Criar a order
+            try {
+                String url = (AppProperties.getInstance()).hostName + "api/orders/";
+                StringRequest postRequest = new StringRequest(Request.Method.POST, url,
+                        new Response.Listener<String>()
+                        {
+                            @Override
+                            public void onResponse(String response) {
+                                // response
+                                try {
+                                    Log.e("T", response);
+                                    TinyDB tinydb = new TinyDB(getApplicationContext());
+
+                                    JSONObject obj = new JSONObject(response);
+                                    Boolean putBlacklist = obj.getBoolean("PutBlacklist");
+
+                                    if(obj.has("OrderId")){
+                                        int orderId = obj.getInt("OrderId");
+                                        tinydb.putInt("LastOrderId", orderId);
+                                    }
+
+                                    if(putBlacklist){
+                                        //Adiciona na blacklist
+                                        //TinyDB tinydb = new TinyDB(getApplicationContext());
+                                        List<String> costumerBlackList = new ArrayList<>();
+                                        ArrayList<Object> arl = tinydb.getListObject("CostumerBlackList", String.class); //Load
+                                        for (Object e : arl) { costumerBlackList.add((String) e); }
+                                        costumerBlackList.add(order.getUuid()); //Adiciona o novo elemento
+                                        ArrayList<Object> listOfStrings = new ArrayList<>(costumerBlackList.size());
+                                        listOfStrings.addAll(costumerBlackList);
+                                        tinydb.putListObject("CostumerBlackList", listOfStrings); //Save
+                                    }
+
+                                } catch (Throwable t) {
+                                    Log.e("App", t.getMessage());
+                                }
+                            }
+                        },
+                        new Response.ErrorListener()
+                        {
+                            @Override
+                            public void onErrorResponse(VolleyError error) {
+                                // Guarda order na lista de orders ainda não sincronizadas com o servidor
+                                TinyDB tinydb = new TinyDB(getApplicationContext());
+                                List<Checkout> offlineCheckoutList = new ArrayList<>();
+                                ArrayList<Object> arl = tinydb.getListObject("OfflineCheckoutList", Checkout.class); //Load
+                                for (Object e : arl) { offlineCheckoutList.add((Checkout) e); }
+                                offlineCheckoutList.add(order); //Adiciona o novo elemento
+                                ArrayList<Object> listOfStrings = new ArrayList<>(offlineCheckoutList.size());
+                                listOfStrings.addAll(offlineCheckoutList);
+                                tinydb.putListObject("OfflineCheckoutList", listOfStrings); //Save
+                            }
+                        }
+                ) {
+                    @Override
+                    protected Map<String, String> getParams()
+                    {
+                        Gson gson = new Gson();
+                        Map<String, String>  params = new HashMap<>();
+
+                        params.put("CostumerUuid", order.getUuid());
+                        params.put("Date", order.getDate());
+
+                        List<OrderDetails> od = new ArrayList<>();
+                        for (Product p : order.getItems()) { od.add(new OrderDetails(p.getId(),p.getQuantity(),p.getPrice())); }
+                        params.put("Products", gson.toJson(od).replace("\"", ""));
+
+                        List<VoucherDetails> vd = new ArrayList<>();
+                        for (Voucher p : order.getVouchers()) { vd.add(new VoucherDetails(p.getId(),p.getType(),"")); } //TODO corrigir signature
+                        params.put("Vouchers", gson.toJson(vd).replace("\"", ""));
+
+                        //Log.e("PostParams", params.toString());
+                        return params;
+                    }
+                };
+                requestQueue.add(postRequest);
+
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+
+        }
+
+    }
+
 
     /**
      * Shows the progress UI and hides the main form.
