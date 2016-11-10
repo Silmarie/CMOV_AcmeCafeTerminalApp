@@ -118,12 +118,18 @@ public class MainActivity extends AppCompatActivity implements ZXingScannerView.
                                 JSONObject obj = new JSONObject(response);
                                 String title = obj.getString("Title");
                                 String message = obj.getString("Message");
+                                Boolean putBlacklist = obj.getBoolean("PutBlacklist");
 
                                 AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
                                 builder.setTitle(title);
                                 builder.setMessage(message);
                                 AlertDialog alert1 = builder.create();
                                 alert1.show();
+
+                                if(putBlacklist){
+                                    //TODO adicionar na blacklist
+                                }
+
                             } catch (Throwable t) {
                                 Log.e("App", t.getMessage());
                             }
