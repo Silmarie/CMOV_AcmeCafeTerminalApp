@@ -15,6 +15,7 @@ import com.android.volley.Request;
 import com.android.volley.RequestQueue;
 import com.android.volley.Response;
 import com.android.volley.VolleyError;
+import com.android.volley.toolbox.JsonArrayRequest;
 import com.android.volley.toolbox.StringRequest;
 import com.android.volley.toolbox.Volley;
 import com.example.joanabeleza.acmecafeterminal.Models.Checkout;
@@ -23,10 +24,13 @@ import com.example.joanabeleza.acmecafeterminal.Models.Product;
 import com.example.joanabeleza.acmecafeterminal.Models.Voucher;
 import com.example.joanabeleza.acmecafeterminal.Models.VoucherDetails;
 import com.example.joanabeleza.acmecafeterminal.Utils.AppProperties;
+import com.example.joanabeleza.acmecafeterminal.Utils.TinyDB;
 import com.google.gson.Gson;
 import com.google.zxing.BarcodeFormat;
 import com.google.zxing.Result;
 
+import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
@@ -53,6 +57,8 @@ public class MainActivity extends AppCompatActivity implements ZXingScannerView.
         requestQueue=Volley.newRequestQueue(this);
         mMain = findViewById(R.id.main);
         mProgressView = findViewById(R.id.login_progress);
+
+        updateBlackListFromServer();
     }
 
     public void qrCodeScanner(View view){
@@ -72,7 +78,9 @@ public class MainActivity extends AppCompatActivity implements ZXingScannerView.
     @Override
     public void onPause() {
         super.onPause();
-        mScannerView.stopCamera(); // Stop camera on pause
+        if(mScannerView != null){
+            mScannerView.stopCamera(); // Stop camera on pause
+        }
     }
 
     @Override
@@ -101,11 +109,76 @@ public class MainActivity extends AppCompatActivity implements ZXingScannerView.
     }
 
     /*
+        Update blacklist from server
+     */
+    public void updateBlackListFromServer(){
+        String jsonURL = (AppProperties.getInstance()).hostName + "api/costumers/GetBlackListedCustumers/0/";
+        JsonArrayRequest arrayreq = new JsonArrayRequest(jsonURL,
+                // The second parameter Listener overrides the method onResponse() and passes
+                //JSONArray as a parameter
+                new Response.Listener<JSONArray>() {
+
+                    // Takes the response from the JSON request
+                    @Override
+                    public void onResponse(JSONArray response) {
+                        List<String> costumerBlackList = new ArrayList<>();
+                        for (int i = 0; i < response.length(); i++) {
+                            try {
+
+                                JSONObject jsonObject = response.getJSONObject(i);
+                                String id = jsonObject.getString("Uuid");
+                                costumerBlackList.add(id);
+                            }
+
+                            // Try and catch are included to handle any errors due to JSON
+                            catch (JSONException e) {
+                                // If an error occurs, this prints the error to the log
+                                e.printStackTrace();
+                            }
+                        }
+                        Toast.makeText(mMain.getContext(), "Costumer blacklist updated from the server.", Toast.LENGTH_SHORT).show();
+
+                        // save the blacklist list to preferences
+                        ArrayList<Object> listOfStrings = new ArrayList<>(costumerBlackList.size());
+                        listOfStrings.addAll(costumerBlackList);
+                        TinyDB tinydb = new TinyDB(getApplicationContext());
+                        tinydb.putListObject("CostumerBlackList", listOfStrings);
+                    }
+
+                },
+                // The final parameter overrides the method onErrorResponse() and passes VolleyError
+                //as a parameter
+                new Response.ErrorListener() {
+                    @Override
+                    // Handles errors that occur due to Volley
+                    public void onErrorResponse(VolleyError error) {
+                        Log.e("Volley", "Error");
+                        Toast.makeText(mMain.getContext(), "Cannot update costumer blacklist from the server.", Toast.LENGTH_SHORT).show();
+                    }
+                }
+        );
+        // Adds the JSON array request "arrayreq" to the request queue
+        requestQueue.add(arrayreq);
+    }
+
+    /*
         Creates the order
      */
     protected void postOrder(final String uuid, final Checkout order){
         showProgress(true);
 
+        //Verifica se está na blacklist local
+        TinyDB tinydb = new TinyDB(getApplicationContext());
+        ArrayList<Object> arl = tinydb.getListObject("CostumerBlackList", String.class);
+        for (Object e : arl) {
+            if(((String) e).matches(uuid)){
+                Toast.makeText(mMain.getContext(), "This costumer is blacklisted.", Toast.LENGTH_SHORT).show();
+                showProgress(false);
+                return;
+            }
+        }
+
+        // Criar a order
         try {
             String url = (AppProperties.getInstance()).hostName + "api/orders/";
             StringRequest postRequest = new StringRequest(Request.Method.POST, url,
@@ -127,7 +200,19 @@ public class MainActivity extends AppCompatActivity implements ZXingScannerView.
                                 alert1.show();
 
                                 if(putBlacklist){
-                                    //TODO adicionar na blacklist
+                                    //Adiciona na blacklist
+                                    TinyDB tinydb = new TinyDB(getApplicationContext());
+                                    List<String> costumerBlackList = new ArrayList<>();
+                                    ArrayList<Object> arl = tinydb.getListObject("CostumerBlackList", String.class);
+                                    for (Object e : arl) {
+                                        costumerBlackList.add((String) e);
+                                    }
+
+                                    costumerBlackList.add(uuid);
+
+                                    ArrayList<Object> listOfStrings = new ArrayList<>(costumerBlackList.size());
+                                    listOfStrings.addAll(costumerBlackList);
+                                    tinydb.putListObject("CostumerBlackList", listOfStrings);
                                 }
 
                             } catch (Throwable t) {
@@ -144,7 +229,7 @@ public class MainActivity extends AppCompatActivity implements ZXingScannerView.
                             // error
                             Log.e("Volley", error.toString());
                             Toast.makeText(mMain.getContext(), "Couldn't connect to the server.", Toast.LENGTH_SHORT).show();
-                            //TODO fazer a validação offline
+                            //TODO fazer a validação offline e guardar a order para posteriormente mandar para o sv
                             showProgress(false);
                         }
                     }
