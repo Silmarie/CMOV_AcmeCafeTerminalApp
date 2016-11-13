@@ -16,6 +16,7 @@ import com.android.volley.RequestQueue;
 import com.android.volley.Response;
 import com.android.volley.VolleyError;
 import com.android.volley.toolbox.JsonArrayRequest;
+import com.android.volley.toolbox.JsonObjectRequest;
 import com.android.volley.toolbox.StringRequest;
 import com.android.volley.toolbox.Volley;
 import com.example.joanabeleza.acmecafeterminal.Models.Checkout;
@@ -61,6 +62,7 @@ public class MainActivity extends AppCompatActivity implements ZXingScannerView.
         mMain = findViewById(R.id.main);
         mProgressView = findViewById(R.id.login_progress);
 
+        updateServerPublicKey();
         updateBlackListFromServer();
         postStoredCheckoutList();
     }
@@ -166,6 +168,52 @@ public class MainActivity extends AppCompatActivity implements ZXingScannerView.
         requestQueue.add(arrayreq);
     }
 
+    public void updateServerPublicKey(){
+        String jsonURL = (AppProperties.getInstance()).hostName + "api/publickeys";
+        JsonObjectRequest arrayreq = new JsonObjectRequest(Request.Method.GET, jsonURL, null,
+                // The second parameter Listener overrides the method onResponse() and passes
+                //JSONArray as a parameter
+                new Response.Listener<JSONObject>() {
+
+                    // Takes the response from the JSON request
+                    @Override
+                    public void onResponse(JSONObject response) {
+                        for (int i = 0; i < response.length(); i++) {
+
+                            String PublicModulus = null;
+                            try {
+                                PublicModulus = response.getString("PublicModulus");
+                                String PublicExp = response.getString("PublicExp");
+
+                                //Save
+                                TinyDB tinydb = new TinyDB(getApplicationContext());
+                                tinydb.putString("PublicModulus", PublicModulus);
+                                tinydb.putString("PublicExp", PublicExp);
+
+                            } catch (JSONException e) {
+                                e.printStackTrace();
+                            }
+
+                        }
+
+                        Toast.makeText(mMain.getContext(), "Public key updated from the server.", Toast.LENGTH_SHORT).show();
+                    }
+
+                },
+                // The final parameter overrides the method onErrorResponse() and passes VolleyError
+                //as a parameter
+                new Response.ErrorListener() {
+                    @Override
+                    // Handles errors that occur due to Volley
+                    public void onErrorResponse(VolleyError error) {
+                        Log.e("Volley", "Error" + error.toString());
+                        Toast.makeText(mMain.getContext(), "Cannot update public key from the server.", Toast.LENGTH_SHORT).show();
+                    }
+                }
+        );
+        // Adds the JSON array request "arrayreq" to the request queue
+        requestQueue.add(arrayreq);
+    }
     /*
         Creates the order
      */
@@ -284,7 +332,7 @@ public class MainActivity extends AppCompatActivity implements ZXingScannerView.
                     params.put("Products", gson.toJson(od).replace("\"", ""));
 
                     List<VoucherDetails> vd = new ArrayList<>();
-                    for (Voucher p : order.getVouchers()) { vd.add(new VoucherDetails(p.getId(),p.getType(),"")); } //TODO corrigir signature
+                    for (Voucher p : order.getVouchers()) { vd.add(new VoucherDetails(p.getId(),p.getType(), p.getSignature())); } //TODO corrigir signature
                     params.put("Vouchers", gson.toJson(vd).replace("\"", ""));
 
                     //Log.e("PostParams", params.toString());
