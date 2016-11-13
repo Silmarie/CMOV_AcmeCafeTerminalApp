@@ -27,6 +27,7 @@ import com.example.joanabeleza.acmecafeterminal.Models.VoucherDetails;
 import com.example.joanabeleza.acmecafeterminal.Utils.AppProperties;
 import com.example.joanabeleza.acmecafeterminal.Utils.TinyDB;
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.zxing.BarcodeFormat;
 import com.google.zxing.Result;
 
@@ -288,6 +289,14 @@ public class MainActivity extends AppCompatActivity implements ZXingScannerView.
                             Toast.makeText(mMain.getContext(), "Couldn't send the order to the server.", Toast.LENGTH_SHORT).show();
                             //TODO fazer a validação offline e mandar order posteriormente para o sv
 
+                            for (Voucher v:order.getVouchers()) {
+                                if(!v.validateVoucher(MainActivity.this, order.getUuid())){
+                                    Toast.makeText(mMain.getContext(), "Invalid voucher signature.", Toast.LENGTH_SHORT).show();
+                                    showProgress(false);
+                                    return;
+                                }
+                            }
+
                             TinyDB tinydb = new TinyDB(getApplicationContext());
 
                             //Apresenta os dados da encomenda ao utilizador
@@ -321,7 +330,7 @@ public class MainActivity extends AppCompatActivity implements ZXingScannerView.
                 @Override
                 protected Map<String, String> getParams()
                 {
-                    Gson gson = new Gson();
+                    Gson gson = new GsonBuilder().disableHtmlEscaping().create();
                     Map<String, String>  params = new HashMap<>();
 
                     params.put("CostumerUuid", order.getUuid());
@@ -332,10 +341,10 @@ public class MainActivity extends AppCompatActivity implements ZXingScannerView.
                     params.put("Products", gson.toJson(od).replace("\"", ""));
 
                     List<VoucherDetails> vd = new ArrayList<>();
-                    for (Voucher p : order.getVouchers()) { vd.add(new VoucherDetails(p.getId(),p.getType(), p.getSignature())); } //TODO corrigir signature
+                    for (Voucher p : order.getVouchers()) { vd.add(new VoucherDetails(p.getId(),p.getType(), "'" + p.getSignature() + "'")); }
                     params.put("Vouchers", gson.toJson(vd).replace("\"", ""));
 
-                    //Log.e("PostParams", params.toString());
+                    Log.e("PostParams", params.toString());
                     return params;
                 }
             };
@@ -412,7 +421,7 @@ public class MainActivity extends AppCompatActivity implements ZXingScannerView.
                     @Override
                     protected Map<String, String> getParams()
                     {
-                        Gson gson = new Gson();
+                        Gson gson = new GsonBuilder().disableHtmlEscaping().create();
                         Map<String, String>  params = new HashMap<>();
 
                         params.put("CostumerUuid", order.getUuid());
@@ -423,10 +432,10 @@ public class MainActivity extends AppCompatActivity implements ZXingScannerView.
                         params.put("Products", gson.toJson(od).replace("\"", ""));
 
                         List<VoucherDetails> vd = new ArrayList<>();
-                        for (Voucher p : order.getVouchers()) { vd.add(new VoucherDetails(p.getId(),p.getType(),"")); } //TODO corrigir signature
-                        params.put("Vouchers", gson.toJson(vd).replace("\"", ""));
+                        for (Voucher p : order.getVouchers()) { vd.add(new VoucherDetails(p.getId(),p.getType(), "'" + p.getSignature() + "'")); }
+                        params.put("Vouchers", "'" + gson.toJson(vd).replace("\"", "") + "'");
 
-                        //Log.e("PostParams", params.toString());
+                        Log.e("PostParams", params.toString());
                         return params;
                     }
                 };
