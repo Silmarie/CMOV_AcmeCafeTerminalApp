@@ -35,6 +35,7 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.math.BigDecimal;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -234,6 +235,28 @@ public class MainActivity extends AppCompatActivity implements ZXingScannerView.
             }
         }
 
+        for (Voucher v: order.getVouchers()) {
+            if(v.getType() == 0){
+                boolean found = false;
+                do{
+                    for (Product p : order.getItems()) {
+                        if(p.getId() == 1 || p.getId() == 2){
+                            order.setTotal(order.getTotal().subtract(p.getPrice()));
+                            //p.setPrice(new BigDecimal(0));
+                            found = true;
+                        }
+                    }
+                }while (!found);
+                if(!found){
+                    List<Voucher> lv = order.getVouchers();
+                    lv.remove(v);
+                    order.setVouchers(lv);
+                }
+            }else if(v.getType() == 1){
+                order.setTotal(order.getTotal().multiply(new BigDecimal(0.95)).setScale(2, BigDecimal.ROUND_HALF_UP));
+            }
+        }
+
         // Criar a order
         try {
             String url = (AppProperties.getInstance()).hostName + "api/orders/";
@@ -344,7 +367,7 @@ public class MainActivity extends AppCompatActivity implements ZXingScannerView.
                     for (Voucher p : order.getVouchers()) { vd.add(new VoucherDetails(p.getId(),p.getType(), "'" + p.getSignature() + "'")); }
                     params.put("Vouchers", gson.toJson(vd).replace("\"", ""));
 
-                    Log.e("PostParams", params.toString());
+                    //Log.e("PostParams", params.toString());
                     return params;
                 }
             };
@@ -374,7 +397,7 @@ public class MainActivity extends AppCompatActivity implements ZXingScannerView.
                             public void onResponse(String response) {
                                 // response
                                 try {
-                                    Log.e("T", response);
+                                    //Log.e("T", response);
                                     TinyDB tinydb = new TinyDB(getApplicationContext());
 
                                     JSONObject obj = new JSONObject(response);
@@ -433,9 +456,9 @@ public class MainActivity extends AppCompatActivity implements ZXingScannerView.
 
                         List<VoucherDetails> vd = new ArrayList<>();
                         for (Voucher p : order.getVouchers()) { vd.add(new VoucherDetails(p.getId(),p.getType(), "'" + p.getSignature() + "'")); }
-                        params.put("Vouchers", "'" + gson.toJson(vd).replace("\"", "") + "'");
+                        params.put("Vouchers", gson.toJson(vd).replace("\"", ""));
 
-                        Log.e("PostParams", params.toString());
+                        //Log.e("PostParams", params.toString());
                         return params;
                     }
                 };

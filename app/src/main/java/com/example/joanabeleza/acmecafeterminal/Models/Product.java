@@ -38,6 +38,9 @@ public class Product implements Serializable {
         return price;
     }
 
+    public void setPrice(BigDecimal price) {
+        this.price = price;
+    }
 
     public int getQuantity() {
         return quantity;
